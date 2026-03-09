@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feature/**", "release/**", "hotfix/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    name: Run test suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate synthetic dataset
+        # Tests for generate_data rely on the CSV existing.
+        # This step runs the generator so all tests can be executed in one pass.
+        run: python src/generate_data.py
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  reuse:
+    name: REUSE compliance check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check REUSE compliance (REUSE Spec v3.3)
+        uses: fsfe/reuse-action@v4
