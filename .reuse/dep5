@@ -1,8 +1,0 @@
-Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: cloud-incident-predictor
-Upstream-Contact: Ignacio Garbayo Fernandez <ignacio.garbayo@rai.usc.es>
-Source: https://github.com/igarbayo/cloud-incident-predictor
-
-Files: data/* notebooks/* .github/* *.md *.txt *.yml requirements.txt LICENSES/* .reuse/*
-Copyright: 2025 Ignacio Garbayo Fernandez
-License: MIT

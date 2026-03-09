@@ -1,0 +1,18 @@
+version = 1
+
+[[annotations]]
+path = [
+    "data/**",
+    "notebooks/**",
+    ".github/**",
+    "*.md",
+    "*.txt",
+    "*.yml",
+    "*.toml",
+    "requirements.txt",
+    "LICENSES/**",
+    ".reuse/**",
+    ".gitignore",
+]
+copyright = "2025 Ignacio Garbayo Fernandez"
+license = "MIT"
