@@ -4,7 +4,7 @@ SPDX-PackageSupplier = "Ignacio Garbayo Fernandez <ignacio.garbayo@rai.usc.es>"
 SPDX-PackageDownloadLocation = "https://github.com/igarbayo/cloud-incident-predictor"
 
 [[annotations]]
-path = [".gitignore", "requirements.txt", "README.md", "CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "GOVERNANCE.md", "SECURITY.md", ".github/CODEOWNERS", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/bug_report.md", ".github/ISSUE_TEMPLATE/feature_request.md", ".github/workflows/ci.yml", "notebooks/01_exploration_and_evaluation.ipynb", "LICENSES/MIT.txt", "data/**", "REUSE.toml"]
+path = [".gitignore", "requirements.txt", "README.md", "CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "GOVERNANCE.md", "SECURITY.md", ".github/CODEOWNERS", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/bug_report.md", ".github/ISSUE_TEMPLATE/feature_request.md", ".github/workflows/ci.yml", ".github/dependabot.yml", "notebooks/01_exploration_and_evaluation.ipynb", "LICENSES/MIT.txt", "data/**", "REUSE.toml"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2025 Ignacio Garbayo Fernandez"
 SPDX-License-Identifier = "MIT"
