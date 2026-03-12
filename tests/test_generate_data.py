@@ -15,12 +15,14 @@ import pytest
 import pandas as pd
 from pathlib import Path
 
+from src.generate_data import INCIDENT_TYPES
+
 DATA_PATH = Path("data/synthetic_metrics.csv")
 
-EXPECTED_ROWS = 10_000
-INCIDENT_RATE_LOW = 0.01   # at least 1% of timesteps are incidents
-INCIDENT_RATE_HIGH = 0.15  # at most 15% (point anomalies with short duration)
-MIN_INCIDENT_WINDOWS = 5   # at least 5 distinct contiguous incident regions
+EXPECTED_ROWS      = 10_000
+INCIDENT_RATE_LOW  = 0.01   # at least 1% of timesteps are incidents
+INCIDENT_RATE_HIGH = 0.20   # at most 20% (six types with varied durations)
+MIN_INCIDENT_WINDOWS = 5    # at least 5 distinct contiguous incident regions
 
 
 class TestCSVExists:
@@ -50,10 +52,10 @@ class TestCSVShape:
 
     def test_required_columns(self, df):
         """
-        Must have at minimum: t (timestep index), metric (simulated value),
-        is_incident (binary label).
+        Must have: t (timestep index), metric (simulated value),
+        is_incident (binary label), incident_type (anomaly type string).
         """
-        required = {"t", "metric", "is_incident"}
+        required = {"t", "metric", "is_incident", "incident_type"}
         missing = required - set(df.columns)
         assert not missing, f"Missing columns: {missing}"
 
@@ -74,8 +76,8 @@ class TestDtypes:
         is_incident must be integer 0/1, not float, not string.
 
         Example of a correct row:
-            t=42, metric=0.831, is_incident=0
-            t=137, metric=5.921, is_incident=1   ← anomaly injected here
+            t=42, metric=0.831, is_incident=0, incident_type=''
+            t=137, metric=5.921, is_incident=1, incident_type='spike'
         """
         assert pd.api.types.is_integer_dtype(df["is_incident"]), (
             f"Expected integer dtype for 'is_incident', got {df['is_incident'].dtype}"
@@ -83,6 +85,15 @@ class TestDtypes:
         unique_vals = set(df["is_incident"].unique())
         assert unique_vals.issubset({0, 1}), (
             f"is_incident must only contain 0 and 1, found: {unique_vals}"
+        )
+
+    def test_incident_type_is_string(self, df):
+        """
+        incident_type must be a string column. Normal timesteps have empty
+        string ''; incident timesteps have one of the six known type names.
+        """
+        assert df["incident_type"].dtype == object, (
+            f"Expected object dtype for 'incident_type', got {df['incident_type'].dtype}"
         )
 
 
@@ -93,8 +104,8 @@ class TestIncidentRate:
 
     def test_incident_rate_in_bounds(self, df):
         """
-        With anomaly_fraction=0.02 and duration 1-5 steps, the rate should
-        be between 1% and 15% of total timesteps.
+        With six incident types and varied durations, the rate should be
+        between 1% and 20% of total timesteps.
 
         A rate outside this range means the synthetic data does not represent
         a realistic rare-event scenario — either too many or too few incidents
@@ -128,4 +139,58 @@ class TestIncidentRate:
         assert transitions >= MIN_INCIDENT_WINDOWS, (
             f"Expected at least {MIN_INCIDENT_WINDOWS} incident windows "
             f"(0→1 transitions), found {transitions}."
+        )
+
+
+class TestIncidentTypes:
+    @pytest.fixture(scope="class")
+    def df(self):
+        # Empty strings in incident_type are saved as blank cells in CSV,
+        # which pandas reads back as NaN — fill them to restore the original value.
+        df = pd.read_csv(DATA_PATH)
+        df['incident_type'] = df['incident_type'].fillna('')
+        return df
+
+    def test_all_incident_types_present(self, df):
+        """
+        All six incident types must appear at least once in the dataset.
+        If any type is missing, the dataset does not cover the full anomaly
+        taxonomy and the model will not learn to detect that pattern.
+        """
+        observed = set(df.loc[df["incident_type"] != "", "incident_type"].unique())
+        expected = set(INCIDENT_TYPES)
+        missing = expected - observed
+        assert not missing, (
+            f"Incident types not present in dataset: {missing}. "
+            "Increase n_steps or anomaly_fraction."
+        )
+
+    def test_incident_type_only_on_incident_rows(self, df):
+        """
+        Normal timesteps (is_incident=0) must have incident_type == ''.
+        Incident timesteps (is_incident=1) must have a non-empty incident_type.
+
+        This validates that the type label is consistent with the binary label.
+        """
+        normal_with_type = df[(df["is_incident"] == 0) & (df["incident_type"] != "")]
+        assert len(normal_with_type) == 0, (
+            f"Found {len(normal_with_type)} normal timesteps with non-empty incident_type."
+        )
+
+        incident_without_type = df[(df["is_incident"] == 1) & (df["incident_type"] == "")]
+        assert len(incident_without_type) == 0, (
+            f"Found {len(incident_without_type)} incident timesteps with empty incident_type."
+        )
+
+    def test_incident_type_values_are_valid(self, df):
+        """
+        Every non-empty incident_type value must be one of the known types.
+        Unknown strings indicate a bug in the injection logic.
+        """
+        valid = set(INCIDENT_TYPES) | {""}
+        observed = set(df["incident_type"].unique())
+        invalid = observed - valid
+        assert not invalid, (
+            f"Unknown incident_type values found: {invalid}. "
+            f"Valid values are: {valid}"
         )
