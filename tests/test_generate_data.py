@@ -92,9 +92,10 @@ class TestDtypes:
         incident_type must be a string column. Normal timesteps have empty
         string ''; incident timesteps have one of the six known type names.
         """
-        assert df["incident_type"].dtype == object, (
-            f"Expected object dtype for 'incident_type', got {df['incident_type'].dtype}"
-        )
+        # pandas <3.x uses object dtype; pandas ≥3.x infers StringDtype — accept both
+        assert df["incident_type"].dtype == object or isinstance(
+            df["incident_type"].dtype, pd.StringDtype
+        ), f"Expected string-like dtype for 'incident_type', got {df['incident_type'].dtype}"
 
 
 class TestIncidentRate:
