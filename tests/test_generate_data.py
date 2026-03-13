@@ -55,7 +55,7 @@ class TestCSVShape:
         Must have: t (timestep index), metric (simulated value),
         is_incident (binary label), incident_type (anomaly type string).
         """
-        required = {"t", "metric", "is_incident", "incident_type"}
+        required = {"t", "metric", "metric_2", "is_incident", "incident_type"}
         missing = required - set(df.columns)
         assert not missing, f"Missing columns: {missing}"
 

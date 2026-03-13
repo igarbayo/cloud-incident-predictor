@@ -260,3 +260,70 @@ class TestTemporalSplit:
             X_test[0], X[split],
             err_msg="First row of X_test must be X[split].",
         )
+
+
+# ---------------------------------------------------------------------------
+# Multivariate windows — feature_cols parameter
+# ---------------------------------------------------------------------------
+
+class TestMultivariateWindows:
+    @pytest.fixture(scope="class")
+    def bivariate_df(self, synthetic_df):
+        """synthetic_df extended with a second metric column."""
+        df = synthetic_df.copy()
+        df["metric_2"] = synthetic_df["metric"].values * 0.6 + 0.1
+        return df
+
+    def test_feature_width_with_two_metrics(self, bivariate_df):
+        """
+        With feature_cols=['metric', 'metric_2'], each row has W * 2 features.
+
+        The window for each timestep concatenates W values of metric_1 followed
+        by W values of metric_2, giving a vector of length W * F = 15 * 2 = 30.
+        """
+        X, _ = create_sliding_windows(
+            bivariate_df, W=W, H=H, feature_cols=["metric", "metric_2"]
+        )
+        assert X.shape[1] == W * 2, (
+            f"Expected {W * 2} features for 2 metrics × W={W} steps, got {X.shape[1]}"
+        )
+
+    def test_single_metric_backward_compatible(self, synthetic_df):
+        """
+        Default feature_cols=None must produce identical output to explicit
+        feature_cols=['metric']. The parameter must be fully backward-compatible.
+        """
+        X_default, y_default = create_sliding_windows(synthetic_df, W=W, H=H)
+        X_explicit, y_explicit = create_sliding_windows(
+            synthetic_df, W=W, H=H, feature_cols=["metric"]
+        )
+        np.testing.assert_array_equal(X_default, X_explicit)
+        np.testing.assert_array_equal(y_default, y_explicit)
+
+    def test_multivariate_no_leakage(self, bivariate_df):
+        """
+        The no-data-leakage guarantee must hold in multivariate mode.
+
+        A spike injected at t=100 in both metrics must NOT change the feature
+        vector for any window that ends at or before t=99.
+        """
+        df_spike = bivariate_df.copy()
+        df_spike.loc[100, "metric"]   = 9999.0
+        df_spike.loc[100, "metric_2"] = 9999.0
+
+        X_clean, _ = create_sliding_windows(
+            bivariate_df, W=W, H=H, feature_cols=["metric", "metric_2"]
+        )
+        X_spike, _ = create_sliding_windows(
+            df_spike, W=W, H=H, feature_cols=["metric", "metric_2"]
+        )
+
+        row_for_t99 = 99 - W  # = 84
+        np.testing.assert_array_equal(
+            X_clean[row_for_t99],
+            X_spike[row_for_t99],
+            err_msg=(
+                f"Row {row_for_t99} (t=99) changed when spike was added at t=100. "
+                "Multivariate window must not leak future values."
+            ),
+        )

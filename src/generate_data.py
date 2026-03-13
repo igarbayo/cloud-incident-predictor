@@ -4,25 +4,30 @@
 """
 Synthetic cloud metrics generator.
 
-Generates a time series that simulates a cloud metric (e.g. CPU usage,
-request latency) with realistic structure and six distinct incident types.
+Generates a two-metric time series simulating a cloud system under monitoring:
+  - metric   : CPU usage (%) — primary signal
+  - metric_2 : Memory usage (%) — mixing coeff. 0.6 with CPU; measured r ≈ 0.887
+
+Both metrics share the same incident windows but respond with different intensities,
+reflecting realistic co-movement between CPU and memory during cloud incidents.
 
 Signal structure:
   - Base: sinusoidal wave simulating diurnal patterns (day/night cycles)
   - Noise: Gaussian noise simulating measurement uncertainty
   - Incidents: six anomaly types injected at random positions
 
-Incident types:
-  - spike:               sudden upward burst (DDoS, flash sale, traffic spike)
-  - threshold_breach:    metric sustained above a fixed upper limit (CPU saturation)
-  - gradual_degradation: slow ramp-up over time (memory leak, disk fill)
-  - level_shift:         abrupt jump to a new elevated baseline (config change, partial failure)
-  - drop:                metric collapses to near-zero (service crash, network blackout)
-  - oscillation:         increased variance / instability (thrashing, feedback loop)
+Incident types and their real-world interpretations:
+  - spike:               sudden CPU burst (DDoS, flash sale, traffic spike)
+  - threshold_breach:    CPU pinned above saturation limit (runaway process, overload)
+  - gradual_degradation: slow ramp-up over time (memory leak, disk fill, GC pressure)
+  - level_shift:         abrupt jump to elevated baseline (bad deploy, partial failure)
+  - drop:                both metrics collapse to near-zero (service crash, network blackout)
+  - oscillation:         high-variance instability (autoscaler thrashing, feedback loop)
 
 Output schema (saved to data/synthetic_metrics.csv):
   t             : int    — timestep index 0..N-1
-  metric        : float  — simulated metric value (e.g. normalised CPU %)
+  metric        : float  — CPU usage (normalised, sinusoidal baseline + incidents)
+  metric_2      : float  — Memory usage (mixing coeff. 0.6 with CPU, measured r ≈ 0.887)
   is_incident   : int    — 1 during any incident window, 0 otherwise
   incident_type : str    — one of the six types above, or '' for normal timesteps
 """
@@ -189,9 +194,16 @@ def generate_synthetic_data(
         is_incident[idx:end] = 1
         incident_type[idx:end] = itype
 
+    # metric_2: Memory usage — correlated with CPU but with independent dynamics.
+    # Computed AFTER incidents are injected so it automatically reflects the same
+    # incident windows at 60% intensity, plus its own diurnal pattern and noise.
+    metric_2_base = np.cos(time * 0.07 + 0.8) + rng.normal(0, 0.25, n_steps)
+    metric_2 = (0.6 * metric + 0.4 * metric_2_base).astype(float)
+
     df = pd.DataFrame({
         "t":             time,
         "metric":        metric.astype(float),
+        "metric_2":      metric_2,
         "is_incident":   is_incident,
         "incident_type": incident_type,
     })
