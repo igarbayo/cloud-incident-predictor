@@ -4,12 +4,11 @@
 """
 Synthetic cloud metrics generator.
 
-Generates a two-metric time series simulating a cloud system under monitoring:
+Generates a three-metric time series simulating a cloud system under monitoring:
   - metric   : CPU usage (%) — primary signal
   - metric_2 : Memory usage (%) — mixing coeff. 0.6 with CPU; measured r ≈ 0.887
-
-Both metrics share the same incident windows but respond with different intensities,
-reflecting realistic co-movement between CPU and memory during cloud incidents.
+  - error_rate: Application error rate (%) — independent of CPU during normal
+                operation; spikes during incidents with its own noise profile
 
 Signal structure:
   - Base: sinusoidal wave simulating diurnal patterns (day/night cycles)
@@ -28,6 +27,8 @@ Output schema (saved to data/synthetic_metrics.csv):
   t             : int    — timestep index 0..N-1
   metric        : float  — CPU usage (normalised, sinusoidal baseline + incidents)
   metric_2      : float  — Memory usage (mixing coeff. 0.6 with CPU, measured r ≈ 0.887)
+  error_rate    : float  — Application error rate; independent baseline ~2%, spikes
+                           to ~20% during incidents; r(CPU, error_rate) ≈ 0.1–0.2
   is_incident   : int    — 1 during any incident window, 0 otherwise
   incident_type : str    — one of the six types above, or '' for normal timesteps
 """
@@ -200,10 +201,22 @@ def generate_synthetic_data(
     metric_2_base = np.cos(time * 0.07 + 0.8) + rng.normal(0, 0.25, n_steps)
     metric_2 = (0.6 * metric + 0.4 * metric_2_base).astype(float)
 
+    # error_rate: Application error rate — genuinely independent of CPU during
+    # normal operation. Base is small positive noise (~2%); during incidents it
+    # spikes independently to ~20% with its own noise profile.
+    # This ensures r(metric, error_rate) ≈ 0.1–0.2 (vs r ≈ 0.887 for metric_2),
+    # making it a useful second feature for the multivariate model (H5 follow-up).
+    error_rate = np.abs(rng.normal(0.02, 0.01, n_steps))
+    inc_mask = is_incident == 1
+    n_inc = int(inc_mask.sum())
+    if n_inc > 0:
+        error_rate[inc_mask] += np.abs(rng.normal(0.18, 0.06, n_inc))
+
     df = pd.DataFrame({
         "t":             time,
         "metric":        metric.astype(float),
         "metric_2":      metric_2,
+        "error_rate":    error_rate.astype(float),
         "is_incident":   is_incident,
         "incident_type": incident_type,
     })

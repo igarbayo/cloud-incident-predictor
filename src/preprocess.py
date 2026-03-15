@@ -40,10 +40,42 @@ Rationale:
     accidentally leaking into the training set's rolling windows.
 """
 
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+# Names of the 6 statistical features appended per metric column when
+# statistical_features=True is passed to create_sliding_windows.
+STAT_FEATURE_NAMES: List[str] = ["mean", "std", "slope", "min", "max", "z_last"]
+N_STAT_FEATURES: int = len(STAT_FEATURE_NAMES)
+
+
+def _window_stats(window_1d: np.ndarray) -> np.ndarray:
+    """
+    Compute 6 summary statistics for a 1-D window of raw metric values.
+
+    Args:
+        window_1d: 1-D array of length W.
+
+    Returns:
+        1-D array of length 6: [mean, std, slope, min, max, z_last].
+
+    Notes:
+        - slope: linear trend coefficient (units: value per timestep).
+        - z_last: z-score of the most recent value; measures how extreme
+          the last observation is relative to the window distribution.
+          A large positive z_last signals a spike; negative signals a dip.
+        - std denominator uses 1e-8 guard to avoid division by zero on
+          flat windows (constant metric value).
+    """
+    mean  = np.mean(window_1d)
+    std   = np.std(window_1d)
+    slope = np.polyfit(np.arange(len(window_1d)), window_1d, 1)[0]
+    min_  = np.min(window_1d)
+    max_  = np.max(window_1d)
+    z_last = (window_1d[-1] - mean) / (std + 1e-8)
+    return np.array([mean, std, slope, min_, max_, z_last], dtype=float)
 
 
 def create_sliding_windows(
@@ -51,6 +83,7 @@ def create_sliding_windows(
     W: int = 15,
     H: int = 5,
     feature_cols: list = None,
+    statistical_features: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Transform a time-series DataFrame into (X, y) using a sliding window.
@@ -60,19 +93,23 @@ def create_sliding_windows(
     temporal context of every monitored signal.
 
     Args:
-        df:           DataFrame with at minimum "is_incident" and the columns
-                      listed in feature_cols, sorted in chronological order.
-        W:            Lookback window length. Number of past timesteps used as features.
-                      Larger W gives the model more context but requires more data.
-        H:            Prediction horizon. Number of future timesteps to check for incidents.
-                      Larger H gives earlier warnings but makes the problem harder.
-        feature_cols: List of metric column names to include as features.
-                      Defaults to ['metric'] for single-metric backward compatibility.
-                      Pass ['metric', 'metric_2'] for CPU + Memory multivariate mode.
+        df:                   DataFrame with at minimum "is_incident" and the columns
+                              listed in feature_cols, sorted in chronological order.
+        W:                    Lookback window length. Number of past timesteps used as features.
+                              Larger W gives the model more context but requires more data.
+        H:                    Prediction horizon. Number of future timesteps to check for incidents.
+                              Larger H gives earlier warnings but makes the problem harder.
+        feature_cols:         List of metric column names to include as features.
+                              Defaults to ['metric'] for single-metric backward compatibility.
+                              Pass ['metric', 'metric_2'] for CPU + Memory multivariate mode.
+        statistical_features: When True, append 6 summary statistics per metric column
+                              (mean, std, slope, min, max, z_last) after the raw window values.
+                              Output shape becomes (N-W-H, W*F + 6*F) instead of (N-W-H, W*F).
+                              Use STAT_FEATURE_NAMES for human-readable column labels.
 
     Returns:
-        X: np.ndarray of shape (N-W-H, W*F) — feature matrix (F = len(feature_cols))
-        y: np.ndarray of shape (N-W-H,)     — binary incident labels
+        X: np.ndarray of shape (N-W-H, W*F [+ 6*F if statistical_features])
+        y: np.ndarray of shape (N-W-H,) — binary incident labels
 
     Raises:
         ValueError: if df has fewer than W+H+1 rows (no valid windows possible).
@@ -109,7 +146,16 @@ def create_sliding_windows(
     for t in range(W, n - H):
         # Feature window: W past timesteps for each metric, flattened to 1D.
         # Shape: (W, F) → flatten → (W * F,)
-        window = features[t - W : t].flatten()
+        raw_window = features[t - W : t]          # shape (W, F)
+        window = raw_window.flatten()
+
+        if statistical_features:
+            # Append 6 stats per metric column: [mean, std, slope, min, max, z_last]
+            stats = np.concatenate([
+                _window_stats(raw_window[:, f])
+                for f in range(raw_window.shape[1])
+            ])
+            window = np.concatenate([window, stats])
 
         # Label: 1 if ANY of the next H timesteps contains an incident.
         label = 1 if np.any(incidents[t : t + H] == 1) else 0
@@ -118,6 +164,41 @@ def create_sliding_windows(
         y_list.append(label)
 
     return np.array(X_list, dtype=float), np.array(y_list, dtype=int)
+
+
+def build_feature_names(
+    W: int,
+    feature_cols: Optional[List[str]] = None,
+    statistical_features: bool = False,
+) -> List[str]:
+    """
+    Return human-readable feature names matching the columns of X produced by
+    create_sliding_windows with the same parameters.
+
+    Useful for labelling feature-importance plots when statistical_features=True.
+
+    Args:
+        W:                    Lookback window size.
+        feature_cols:         Metric column names (defaults to ['metric']).
+        statistical_features: Whether statistical features were appended.
+
+    Returns:
+        List of strings, one per feature column in X.
+
+    Example (W=3, feature_cols=['cpu'], statistical_features=True):
+        ['cpu_t-3', 'cpu_t-2', 'cpu_t-1', 'cpu_mean', 'cpu_std',
+         'cpu_slope', 'cpu_min', 'cpu_max', 'cpu_z_last']
+    """
+    if feature_cols is None:
+        feature_cols = ["metric"]
+
+    names: List[str] = []
+    for col in feature_cols:
+        names += [f"{col}_t-{W - i}" for i in range(W)]
+    if statistical_features:
+        for col in feature_cols:
+            names += [f"{col}_{s}" for s in STAT_FEATURE_NAMES]
+    return names
 
 
 def temporal_split(
