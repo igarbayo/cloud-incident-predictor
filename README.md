@@ -6,7 +6,7 @@ Binary classification system that predicts cloud infrastructure incidents before
 [![REUSE compliant](https://api.reuse.software/badge/github.com/igarbayo/cloud-incident-predictor)](https://api.reuse.software/info/github.com/igarbayo/cloud-incident-predictor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This is an internship project developed at JetBrains by Ignacio Garbayo Fernandez.
+This is an internship project developed for JetBrains by Ignacio Garbayo Fernandez.
 
 ---
 
