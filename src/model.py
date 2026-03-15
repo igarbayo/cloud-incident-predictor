@@ -37,10 +37,11 @@ This effectively equalises the contribution of each class to the loss.
 """
 
 import pickle
-from typing import Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 
 
 class AlertPredictor:
@@ -149,6 +150,68 @@ class AlertPredictor:
             alerts_conservative = predictor.predict(X_test, threshold=CONSERVATIVE.value)
         """
         return (self.predict_proba(X) >= threshold).astype(int)
+
+    def tune(
+        self,
+        X: np.ndarray,
+        y: np.ndarray,
+        param_grid: Optional[Dict] = None,
+        n_splits: int = 5,
+    ) -> Tuple[Dict, float]:
+        """
+        Grid-search hyperparameters using temporally-ordered cross-validation.
+
+        Uses TimeSeriesSplit so that every validation fold is strictly later
+        than its training fold — no future data leakage during tuning.
+        Scoring is average_precision (PR-AUC), consistent with the project's
+        primary evaluation metric.
+
+        After the search, self.clf is replaced with the best estimator
+        (already refitted on the full training data), so predict_proba()
+        can be called immediately.
+
+        Args:
+            X:          Training feature matrix, rows in chronological order.
+            y:          Training labels, same ordering as X.
+            param_grid: Dict of hyperparameter lists to search. Defaults to:
+                        {
+                          'max_depth':        [None, 10, 20],
+                          'min_samples_leaf': [1, 5, 10],
+                          'max_features':     ['sqrt', 'log2'],
+                        }
+                        (18 combinations × n_splits folds)
+            n_splits:   Number of TimeSeriesSplit folds (default 5).
+
+        Returns:
+            best_params: dict of the winning hyperparameter values.
+            best_score:  mean average_precision across CV folds for best_params.
+
+        Example:
+            predictor = AlertPredictor()
+            best_params, best_cv_score = predictor.tune(X_train, y_train)
+            print(f"Best CV PR-AUC: {best_cv_score:.4f}, params: {best_params}")
+            y_proba = predictor.predict_proba(X_test)   # uses best estimator
+        """
+        if param_grid is None:
+            param_grid = {
+                "max_depth":        [None, 10, 20],
+                "min_samples_leaf": [1, 5, 10],
+                "max_features":     ["sqrt", "log2"],
+            }
+
+        cv = TimeSeriesSplit(n_splits=n_splits)
+        gs = GridSearchCV(
+            self.clf,
+            param_grid,
+            scoring="average_precision",
+            cv=cv,
+            n_jobs=-1,
+            refit=True,
+        )
+        gs.fit(X, y)
+        self.clf = gs.best_estimator_
+        self.is_trained = True
+        return gs.best_params_, gs.best_score_
 
     def save(self, path: str) -> None:
         """

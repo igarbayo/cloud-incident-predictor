@@ -1,0 +1,18 @@
+version = 1
+SPDX-PackageName = "cloud-incident-predictor"
+SPDX-PackageSupplier = "Ignacio Garbayo Fernandez <ignacio.garbayo@rai.usc.es>"
+SPDX-PackageDownloadLocation = "https://github.com/igarbayo/cloud-incident-predictor"
+
+[[annotations]]
+path = [".gitignore", "requirements.txt", "README.md", "CHANGELOG.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "GOVERNANCE.md", "SECURITY.md", ".github/CODEOWNERS", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/bug_report.md", ".github/ISSUE_TEMPLATE/feature_request.md", ".github/workflows/ci.yml", ".github/dependabot.yml", "notebooks/01_exploration_and_evaluation.ipynb", "LICENSES/MIT.txt", "data/**", "REUSE.toml", "THIRD_PARTY_NOTICES.md"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025 Ignacio Garbayo Fernandez"
+SPDX-License-Identifier = "MIT"
+
+# NAB (Numenta Anomaly Benchmark) data files — downloaded at runtime, not committed.
+# Included here for documentation purposes per REUSE spec §3.3.
+[[annotations]]
+path = ["data/nab_cpu_asg.csv", "data/nab_windows.json", "data/nab_labels.json"]
+precedence = "closest"
+SPDX-FileCopyrightText = "2014-2024 Numenta Inc."
+SPDX-License-Identifier = "MIT"

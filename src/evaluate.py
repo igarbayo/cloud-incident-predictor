@@ -222,37 +222,42 @@ def plot_feature_importances(
     importances: np.ndarray,
     W: int,
     title: str = "Feature Importances by Window Position",
+    feature_names: Optional[List[str]] = None,
 ) -> plt.Figure:
     """
     Bar chart of feature importances by position in the sliding window.
 
-    Each bar represents one timestep in the lookback window.
-    Position 0 = metric[t-W] (oldest step), Position W-1 = metric[t-1] (most recent).
-
-    Used in the notebook's H2 experiment to answer:
-    "Does the model rely more on recent values or on the full history?"
+    Each bar represents one feature. By default (feature_names=None), features
+    are labelled as raw timestep positions: t-W (oldest) to t-1 (most recent).
+    When statistical_features=True was used in create_sliding_windows, pass the
+    extended feature name list so the stat features are labelled correctly.
 
     Args:
-        importances: Array of shape (W,) from AlertPredictor.feature_importances.
-        W:           Window size (used to label the x-axis).
-        title:       Plot title.
+        importances:   Array from AlertPredictor.feature_importances.
+                       Shape (W,) for raw features, (W + 6,) with stat features.
+        W:             Lookback window size (used only when feature_names is None).
+        title:         Plot title.
+        feature_names: Optional list of strings, one per feature. When provided,
+                       len(feature_names) must equal len(importances).
+                       Build with src.preprocess.build_feature_names() for the
+                       standard raw+stats layout.
 
     Returns:
         matplotlib Figure.
-
-    Example interpretation:
-        If the bars are highest near position W-1 (right side), the model
-        mainly uses recent values — short windows may be sufficient.
-        If the bars are spread evenly, the full history matters equally.
     """
-    positions = np.arange(W)
-    labels = [f"t-{W - i}" for i in positions]   # t-W (oldest) to t-1 (newest)
+    n = len(importances)
+    positions = np.arange(n)
 
-    fig, ax = plt.subplots(figsize=(max(10, W // 2), 4))
+    if feature_names is not None:
+        labels = feature_names
+    else:
+        labels = [f"t-{W - i}" for i in range(W)]   # t-W (oldest) to t-1 (newest)
+
+    fig, ax = plt.subplots(figsize=(max(10, n // 2), 4))
     ax.bar(positions, importances, color="steelblue", edgecolor="white")
-    ax.set_xticks(positions[::max(1, W // 15)])
-    ax.set_xticklabels(labels[::max(1, W // 15)], rotation=45, ha="right")
-    ax.set_xlabel("Window position (relative to current timestep t)")
+    ax.set_xticks(positions[::max(1, n // 15)])
+    ax.set_xticklabels(labels[::max(1, n // 15)], rotation=45, ha="right")
+    ax.set_xlabel("Feature")
     ax.set_ylabel("Mean impurity decrease (importance)")
     ax.set_title(title)
     ax.grid(axis="y", alpha=0.3)
